@@ -11,6 +11,8 @@ import {
   formatWeight,
   isValidLocalDate,
   linearTrend,
+  localTimeInTimeZone,
+  zonedTimeToUtc,
   toDailySeries,
   toGrams,
   isValidWeightG,
@@ -39,7 +41,6 @@ import {
   updateWeight,
 } from '../services/weights.js';
 import type { ToolDefinition } from './model.js';
-import { localTime, zonedTimeToUtc } from './time.js';
 
 export interface ToolRunContext {
   pool: pg.Pool;
@@ -74,10 +75,21 @@ const UnitArg = z.enum(['kg', 'lb']);
 
 /* ---------------------------------------------------------------- helpers */
 
-const fmt = (g: number, u: WeightUnit) => formatWeight(g, u);
-const fmtD = (g: number, u: WeightUnit) => formatDelta(Math.round(g), u);
-const perWeek = (gPerDay: number, u: WeightUnit) =>
-  `${formatDelta(Math.round(gPerDay * 7), u)}/week`;
+/** Number formatting in the user's unit and language, so the model can quote strings verbatim. */
+type Fmt = Pick<UserCtx, 'unit' | 'language'>;
+const UNIT_WORD = {
+  ru: { kg: 'кг', lb: 'фунт.' },
+  en: { kg: 'kg', lb: 'lb' },
+  hy: { kg: 'կգ', lb: 'ֆունտ' },
+} as const;
+const WEEK_WORD = { ru: 'нед', en: 'week', hy: 'շաբ' } as const;
+function localize(core: string, f: Fmt): string {
+  const [n, u] = core.split(' ') as [string, WeightUnit];
+  return `${f.language === 'en' ? n : n.replace('.', ',')} ${UNIT_WORD[f.language][u]}`;
+}
+const fmt = (g: number, f: Fmt) => localize(formatWeight(g, f.unit), f);
+const fmtD = (g: number, f: Fmt) => localize(formatDelta(Math.round(g), f.unit), f);
+const perWeek = (gPerDay: number, f: Fmt) => `${fmtD(gPerDay * 7, f)}/${WEEK_WORD[f.language]}`;
 
 function grams(weight: number, unit: WeightUnit | undefined, ctx: UserCtx): number {
   const g = toGrams(weight, unit ?? ctx.unit);
@@ -97,7 +109,7 @@ function stableUuid(...parts: string[]): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${((parseInt(h[16]!, 16) & 0x3) | 0x8).toString(16)}${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
-function describeSummary(s: Summary, u: WeightUnit) {
+function describeSummary(s: Summary, u: Fmt) {
   const a = s.averages;
   return {
     asOf: s.asOf,
@@ -126,7 +138,7 @@ function describeSummary(s: Summary, u: WeightUnit) {
             days: s.changeFromBaseline.days,
             ratePerWeek:
               s.changeFromBaseline.ratePerWeekG !== null
-                ? `${formatDelta(s.changeFromBaseline.ratePerWeekG, u)}/week`
+                ? `${fmtD(s.changeFromBaseline.ratePerWeekG, u)}/${WEEK_WORD[u.language]}`
                 : null,
           }
         : null,
@@ -224,8 +236,8 @@ const getWeightHistory = defineTool({
       entries: page.items.map((e) => ({
         id: e.id,
         date: e.measuredOn,
-        time: e.measuredAt ? localTime(e.measuredAt, ctx.timezone) : null,
-        weight: fmt(e.weightG, ctx.unit),
+        time: e.measuredAt ? localTimeInTimeZone(e.measuredAt, ctx.timezone) : null,
+        weight: fmt(e.weightG, ctx),
         morningValue: morning.has(e.id),
         note: e.note,
         source: e.source,
@@ -245,7 +257,7 @@ const calculateAnalytics = defineTool({
       outcome: 'ok',
       unit: ctx.unit,
       today: ctx.today,
-      ...describeSummary(await getSummary(db, ctx), ctx.unit),
+      ...describeSummary(await getSummary(db, ctx), ctx),
     };
   },
 });
@@ -271,9 +283,12 @@ const addWeightEntry = defineTool({
   async run(t, db, ctx, a) {
     const weightG = grams(a.weight, a.unit, ctx);
     const date = a.date ?? ctx.today;
+    // "Today" without a time means "just now", so it orders correctly against other entries today.
     const measuredAt = a.time
       ? zonedTimeToUtc(date, a.time, ctx.timezone).toISOString()
-      : undefined;
+      : date === ctx.today
+        ? t.now().toISOString()
+        : undefined;
     const { entry, created } = await createWeight(
       db,
       ctx,
@@ -299,18 +314,18 @@ const addWeightEntry = defineTool({
       entry: {
         id: entry.id,
         date: entry.measuredOn,
-        time: entry.measuredAt ? localTime(entry.measuredAt, ctx.timezone) : null,
-        weight: fmt(entry.weightG, ctx.unit),
+        time: entry.measuredAt ? localTimeInTimeZone(entry.measuredAt, ctx.timezone) : null,
+        weight: fmt(entry.weightG, ctx),
       },
       isMorningValueForDay: isMorning,
-      morningValueForDay: day && !isMorning ? fmt(day.weightG, ctx.unit) : null,
+      morningValueForDay: day && !isMorning ? fmt(day.weightG, ctx) : null,
       changeSincePreviousMorning:
         isMorning && prev
-          ? { display: fmtD(entry.weightG - prev.weightG, ctx.unit), previousDate: prev.date }
+          ? { display: fmtD(entry.weightG - prev.weightG, ctx), previousDate: prev.date }
           : null,
       average7Days:
         avg7.avgG !== null
-          ? { display: fmt(Math.round(avg7.avgG), ctx.unit), measurements: avg7.count }
+          ? { display: fmt(Math.round(avg7.avgG), ctx), measurements: avg7.count }
           : null,
     };
   },
@@ -345,11 +360,11 @@ const updateWeightEntry = defineTool({
     return {
       outcome: 'updated',
       entityId: e.id,
-      before: { date: before.measuredOn, weight: fmt(before.weightG, ctx.unit) },
+      before: { date: before.measuredOn, weight: fmt(before.weightG, ctx) },
       after: {
         date: e.measuredOn,
-        time: e.measuredAt ? localTime(e.measuredAt, ctx.timezone) : null,
-        weight: fmt(e.weightG, ctx.unit),
+        time: e.measuredAt ? localTimeInTimeZone(e.measuredAt, ctx.timezone) : null,
+        weight: fmt(e.weightG, ctx),
         note: e.note,
       },
     };
@@ -386,15 +401,15 @@ const deleteWeightEntry = defineTool({
       return {
         outcome: 'deleted',
         entityId: entry.id,
-        deleted: { date: entry.measuredOn, weight: fmt(entry.weightG, ctx.unit) },
+        deleted: { date: entry.measuredOn, weight: fmt(entry.weightG, ctx) },
       };
     }
-    const time = entry.measuredAt ? ` ${localTime(entry.measuredAt, ctx.timezone)}` : '';
+    const time = entry.measuredAt ? ` ${localTimeInTimeZone(entry.measuredAt, ctx.timezone)}` : '';
     const pending: PendingAction = {
       type: 'delete_weight_entry',
       confirmationId: randomUUID(),
       entryId: entry.id,
-      description: `${entry.measuredOn}${time} — ${fmt(entry.weightG, ctx.unit)}`,
+      description: `${entry.measuredOn}${time} — ${fmt(entry.weightG, ctx)}`,
       expiresAt: new Date(t.now().getTime() + PENDING_TTL_MS).toISOString(),
       createdInMessageId: t.userMessageId,
     };
@@ -444,12 +459,12 @@ const manageGoal = defineTool({
       entityId: g.id,
       goal: {
         direction: g.direction,
-        start: fmt(g.startWeightG, ctx.unit),
-        target: fmt(g.targetWeightG, ctx.unit),
+        start: fmt(g.startWeightG, ctx),
+        target: fmt(g.targetWeightG, ctx),
         startDate: g.startDate,
       },
-      replacedPrevious: previous ? { target: fmt(previous.targetWeightG, ctx.unit) } : null,
-      forecast: describeSummary(s, ctx.unit).forecast,
+      replacedPrevious: previous ? { target: fmt(previous.targetWeightG, ctx) } : null,
+      forecast: describeSummary(s, ctx).forecast,
     };
   },
 });
@@ -556,7 +571,7 @@ const generateReport = defineTool({
     const a1 = avg(inP);
     const a0 = avg(inPrev);
     const trend = inP.length >= 3 ? linearTrend(inP) : null;
-    const s = describeSummary(await getSummary(db, ctx), ctx.unit);
+    const s = describeSummary(await getSummary(db, ctx), ctx);
     const me = await getMe(db, ctx.userId);
     const first = inP[0];
     const last = inP[inP.length - 1];
@@ -564,25 +579,25 @@ const generateReport = defineTool({
       outcome: 'ok',
       reportFormat: me.preferences.reportFormat,
       period: { from, to, calendarDays: length, measuredDays: inP.length },
-      average: a1 !== null ? fmt(Math.round(a1), ctx.unit) : null,
+      average: a1 !== null ? fmt(Math.round(a1), ctx) : null,
       previousPeriod: {
         from: prevFrom,
         to: prevTo,
-        average: a0 !== null ? fmt(Math.round(a0), ctx.unit) : null,
+        average: a0 !== null ? fmt(Math.round(a0), ctx) : null,
         measuredDays: inPrev.length,
       },
-      changeOfAverage: a1 !== null && a0 !== null ? fmtD(a1 - a0, ctx.unit) : null,
-      min: inP.length ? fmt(Math.min(...inP.map((p) => p.weightG)), ctx.unit) : null,
-      max: inP.length ? fmt(Math.max(...inP.map((p) => p.weightG)), ctx.unit) : null,
+      changeOfAverage: a1 !== null && a0 !== null ? fmtD(a1 - a0, ctx) : null,
+      min: inP.length ? fmt(Math.min(...inP.map((p) => p.weightG)), ctx) : null,
+      max: inP.length ? fmt(Math.max(...inP.map((p) => p.weightG)), ctx) : null,
       firstToLast:
         first && last && first !== last
           ? {
               from: first.date,
               to: last.date,
-              change: fmtD(last.weightG - first.weightG, ctx.unit),
+              change: fmtD(last.weightG - first.weightG, ctx),
             }
           : null,
-      trend: trend ? perWeek(trend.slopeGPerDay, ctx.unit) : null,
+      trend: trend ? perWeek(trend.slopeGPerDay, ctx) : null,
       goal: s.goal,
       forecast: s.forecast,
     };

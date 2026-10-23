@@ -6,6 +6,7 @@
  *   2. loop: model → tool calls (each in its own tx) → model … (bounded by max iterations)
  *   3. tx: store the reply and the agent_runs record (tokens, cost, tools, status)
  */
+import { zonedTimeToUtc } from '@weight-ai/core';
 import type { ChatRequest, ChatResponse, PendingAction, ToolEvent } from '@weight-ai/contracts';
 import type pg from 'pg';
 import type { Config } from '../config.js';
@@ -33,7 +34,6 @@ import type { InputItem, ModelClient } from './model.js';
 import { mapOpenAIError } from './model.js';
 import * as promptV1 from './prompts/v1.js';
 import { executeTool, TOOL_NAMES, toolDefinitions, type ToolRunContext } from './tools.js';
-import { zonedTimeToUtc } from './time.js';
 
 export interface AgentDeps {
   pool: pg.Pool;

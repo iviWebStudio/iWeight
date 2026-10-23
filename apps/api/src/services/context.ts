@@ -13,6 +13,7 @@ export interface UserCtx {
   timezone: string;
   unit: WeightUnit;
   displayName: string | null;
+  language: 'ru' | 'en' | 'hy';
   today: LocalDate;
 }
 
@@ -21,7 +22,13 @@ export async function loadCtx(db: Db, userId: string, now = new Date()): Promise
     timezone: string;
     weight_unit: WeightUnit;
     display_name: string | null;
-  }>('select timezone, weight_unit, display_name from profiles where id = $1', [userId]);
+    language: UserCtx['language'] | null;
+  }>(
+    `select p.timezone, p.weight_unit, p.display_name, u.language
+       from profiles p left join user_preferences u on u.user_id = p.id
+      where p.id = $1`,
+    [userId],
+  );
   const p = r.rows[0];
   if (!p) throw notFound('Profile');
   const timezone = isValidTimeZone(p.timezone) ? p.timezone : 'UTC';
@@ -30,6 +37,7 @@ export async function loadCtx(db: Db, userId: string, now = new Date()): Promise
     timezone,
     unit: p.weight_unit,
     displayName: p.display_name,
+    language: p.language ?? 'ru',
     today: localDateInTimeZone(now, timezone),
   };
 }

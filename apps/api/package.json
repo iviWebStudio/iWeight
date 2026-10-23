@@ -10,7 +10,8 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "e2e-server": "tsx src/test/e2e-server.ts"
   },
   "dependencies": {
     "@fastify/cors": "11.3.1",

@@ -1,10 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { addDays, localDateInTimeZone } from '@weight-ai/core';
+import { addDays, localDateInTimeZone, zonedTimeToUtc } from '@weight-ai/core';
 import OpenAI from 'openai';
 import { describe, expect, it } from 'vitest';
 import { mapOpenAIError } from '../agent/model.js';
 import { toolDefinitions, TOOL_NAMES } from '../agent/tools.js';
-import { zonedTimeToUtc } from '../agent/time.js';
 import { withUser } from '../db.js';
 import { call, harness, kg, say, toolOutputs, tools } from './helpers.js';
 
@@ -28,9 +27,9 @@ describe('agent: recording and reading data through tools', () => {
       expect(out).toMatchObject({
         ok: true,
         outcome: 'created',
-        entry: { weight: '80.6 kg', date: today() },
+        entry: { weight: '80,6 кг', date: today() },
         isMorningValueForDay: true,
-        changeSincePreviousMorning: { display: '−0.4 kg' },
+        changeSincePreviousMorning: { display: '−0,4 кг' },
       });
       return {
         text: `Записал 80,6 кг. ${String((out as { changeSincePreviousMorning: { display: string } }).changeSincePreviousMorning.display)} ко вчера.`,
@@ -56,6 +55,16 @@ describe('agent: recording and reading data through tools', () => {
       output_tokens: 40,
       iterations: 2,
     });
+  });
+
+  it('formats numbers in the user language and unit', async () => {
+    const u = await h.signup();
+    await u.req('PATCH', '/v1/me', { weightUnit: 'lb', preferences: { language: 'en' } });
+    h.model.script(tools(call('add_weight_entry', { weight: 180.4 })), (req) => {
+      expect(toolOutputs(req)[0]).toMatchObject({ ok: true, entry: { weight: '180.4 lb' } });
+      return { text: 'Saved.' };
+    });
+    await u.req('POST', '/v1/chat', { message: 'today 180.4' });
   });
 
   it('passes tool errors back to the model instead of saving anything', async () => {
@@ -280,7 +289,7 @@ describe('agent: goals, memory and reports', () => {
         expect(toolOutputs(req)[0]).toMatchObject({
           ok: true,
           outcome: 'goal_set',
-          goal: { direction: 'lose', target: '78.0 kg' },
+          goal: { direction: 'lose', target: '78,0 кг' },
           forecast: { status: 'ok' },
         });
         return { text: 'Цель поставлена' };
@@ -290,7 +299,7 @@ describe('agent: goals, memory and reports', () => {
         expect(toolOutputs(req)[0]).toMatchObject({
           ok: true,
           period: { calendarDays: 7, measuredDays: 7 },
-          trend: '−0.5 kg/week',
+          trend: '−0,5 кг/нед',
           reportFormat: 'standard',
         });
         return { text: 'Отчёт' };

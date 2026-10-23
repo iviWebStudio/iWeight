@@ -67,3 +67,54 @@ export function localDateInTimeZone(instant: Date, timeZone: string): LocalDate 
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
+
+function zoneOffsetMs(instantMs: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(new Date(instantMs));
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  const asUtc = Date.UTC(
+    get('year'),
+    get('month') - 1,
+    get('day'),
+    get('hour'),
+    get('minute'),
+    get('second'),
+  );
+  return asUtc - Math.floor(instantMs / 1000) * 1000;
+}
+
+/**
+ * UTC instant of a wall-clock `HH:MM` on a calendar date in an IANA zone.
+ * A time inside a DST gap resolves to the instant just after the gap.
+ */
+export function zonedTimeToUtc(date: LocalDate, time: string, timeZone: string): Date {
+  assertLocalDate(date);
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
+  if (!m) throw new RangeError(`Invalid time: ${time}`);
+  if (!isValidTimeZone(timeZone)) throw new RangeError(`Invalid time zone: ${timeZone}`);
+  const [y, mo, d] = date.split('-').map(Number) as [number, number, number];
+  const guess = Date.UTC(y, mo - 1, d, Number(m[1]), Number(m[2]));
+  const o1 = zoneOffsetMs(guess, timeZone);
+  let t = guess - o1;
+  const o2 = zoneOffsetMs(t, timeZone);
+  if (o2 !== o1) t = guess - o2;
+  return new Date(t);
+}
+
+/** Local `HH:MM` of an instant in an IANA zone. */
+export function localTimeInTimeZone(instant: Date | string, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(instant));
+}

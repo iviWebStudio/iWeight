@@ -9,6 +9,8 @@ import {
   isValidLocalDate,
   linearTrend,
   localDateInTimeZone,
+  localTimeInTimeZone,
+  zonedTimeToUtc,
   toDailySeries,
   toGrams,
   fromGrams,
@@ -17,7 +19,11 @@ import {
   type WeightEntryInput,
 } from './index.js';
 
-const e = (measuredOn: string, kg: number, extra: Partial<WeightEntryInput> = {}): WeightEntryInput => ({
+const e = (
+  measuredOn: string,
+  kg: number,
+  extra: Partial<WeightEntryInput> = {},
+): WeightEntryInput => ({
   measuredOn,
   weightG: Math.round(kg * 1000),
   ...extra,
@@ -33,6 +39,25 @@ function linear(start: string, days: number, startKg: number, gPerDay: number, e
 }
 
 describe('dates', () => {
+  it('converts wall-clock time in a zone to UTC, across DST and the date line', () => {
+    expect(zonedTimeToUtc('2026-07-01', '07:30', 'Europe/Berlin').toISOString()).toBe(
+      '2026-07-01T05:30:00.000Z',
+    );
+    expect(zonedTimeToUtc('2026-01-15', '07:30', 'Europe/Berlin').toISOString()).toBe(
+      '2026-01-15T06:30:00.000Z',
+    );
+    expect(zonedTimeToUtc('2026-03-10', '00:00', 'Pacific/Kiritimati').toISOString()).toBe(
+      '2026-03-09T10:00:00.000Z',
+    );
+    // 02:30 does not exist in Berlin on 2026-03-29 (clocks jump 02:00 → 03:00)
+    expect(zonedTimeToUtc('2026-03-29', '02:30', 'Europe/Berlin').toISOString()).toBe(
+      '2026-03-29T01:30:00.000Z',
+    );
+    expect(localTimeInTimeZone('2026-03-29T01:30:00.000Z', 'Europe/Berlin')).toBe('03:30');
+    expect(() => zonedTimeToUtc('2026-01-01', '25:00', 'UTC')).toThrow(RangeError);
+    expect(() => zonedTimeToUtc('2026-01-01', '07:00', 'Mars/Base')).toThrow(RangeError);
+  });
+
   it('validates real calendar dates', () => {
     expect(isValidLocalDate('2024-02-29')).toBe(true); // leap year
     expect(isValidLocalDate('2023-02-29')).toBe(false);
@@ -87,11 +112,19 @@ describe('daily series', () => {
       e('2026-10-02', 79.9),
     ]);
     expect(s).toHaveLength(2);
-    expect(s[0]).toMatchObject({ date: '2026-10-01', weightG: 80000, entryCount: 2, entryId: 'morning' });
+    expect(s[0]).toMatchObject({
+      date: '2026-10-01',
+      weightG: 80000,
+      entryCount: 2,
+      entryId: 'morning',
+    });
   });
 
   it('prefers timed entries over untimed ones on the same day', () => {
-    const s = toDailySeries([e('2026-10-01', 81, { id: 'b' }), e('2026-10-01', 80, { id: 'a', measuredAt: '2026-10-01T07:00:00Z' })]);
+    const s = toDailySeries([
+      e('2026-10-01', 81, { id: 'b' }),
+      e('2026-10-01', 80, { id: 'a', measuredAt: '2026-10-01T07:00:00Z' }),
+    ]);
     expect(s[0]!.entryId).toBe('a');
   });
 
@@ -114,9 +147,20 @@ describe('daily series', () => {
 describe('window averages', () => {
   it('averages only measured days and reports the count (gaps are not filled)', () => {
     // Measured on 3 of the last 7 days: 80, 79, 78 → 79.0
-    const s = toDailySeries([e('2026-10-17', 80), e('2026-10-20', 79), e('2026-10-23', 78), e('2026-10-10', 90)]);
+    const s = toDailySeries([
+      e('2026-10-17', 80),
+      e('2026-10-20', 79),
+      e('2026-10-23', 78),
+      e('2026-10-10', 90),
+    ]);
     const w = windowAverage(s, '2026-10-23', 7);
-    expect(w).toEqual({ from: '2026-10-17', to: '2026-10-23', calendarDays: 7, count: 3, avgG: 79000 });
+    expect(w).toEqual({
+      from: '2026-10-17',
+      to: '2026-10-23',
+      calendarDays: 7,
+      count: 3,
+      avgG: 79000,
+    });
   });
 
   it('returns null avg for an empty window', () => {
@@ -149,7 +193,12 @@ describe('linear trend (independently verified)', () => {
     // Sxy = (-2.5)(350)+(-1.5)(150)+(0.5)(50)+(3.5)(-550) = -875-225+25-1925 = -3000
     // slope = -3000/21 = -142.857...
     const t = linearTrend(
-      toDailySeries([e('2026-10-01', 80), e('2026-10-02', 79.8), e('2026-10-04', 79.7), e('2026-10-07', 79.1)]),
+      toDailySeries([
+        e('2026-10-01', 80),
+        e('2026-10-02', 79.8),
+        e('2026-10-04', 79.7),
+        e('2026-10-07', 79.1),
+      ]),
     )!;
     expect(t.slopeGPerDay).toBeCloseTo(-3000 / 21, 9);
   });
@@ -165,12 +214,24 @@ describe('goal progress', () => {
 
   it('loss goal: 85 kg is 50 %', () => {
     const g = goalProgress(lose, 85000);
-    expect(g).toMatchObject({ direction: 'lose', doneG: -5000, remainingG: -5000, progressPct: 50, status: 'in_progress' });
+    expect(g).toMatchObject({
+      direction: 'lose',
+      doneG: -5000,
+      remainingG: -5000,
+      progressPct: 50,
+      status: 'in_progress',
+    });
   });
 
   it('gain goal: 63 kg is 50 % (separate direction, same formula meaning)', () => {
     const g = goalProgress(gain, 63000);
-    expect(g).toMatchObject({ direction: 'gain', doneG: 3000, remainingG: 3000, progressPct: 50, status: 'in_progress' });
+    expect(g).toMatchObject({
+      direction: 'gain',
+      doneG: 3000,
+      remainingG: 3000,
+      progressPct: 50,
+      status: 'in_progress',
+    });
   });
 
   it('achieved within 100 g tolerance', () => {
@@ -191,7 +252,11 @@ describe('goal progress', () => {
 
   it('maintenance goal uses a band, no percentage', () => {
     const m = { startWeightG: 75000, targetWeightG: 75000, startDate: '2026-09-01' };
-    expect(goalProgress(m, 75800)).toMatchObject({ direction: 'maintain', status: 'within_range', progressPct: null });
+    expect(goalProgress(m, 75800)).toMatchObject({
+      direction: 'maintain',
+      status: 'within_range',
+      progressPct: null,
+    });
     expect(goalProgress(m, 76500).status).toBe('outside_range');
   });
 
@@ -202,9 +267,9 @@ describe('goal progress', () => {
 
 describe('pace analysis', () => {
   it('needs enough data', () => {
-    expect(analysePace(toDailySeries(linear('2026-10-20', 4, 80, -100)), '2026-10-23').classification).toBe(
-      'insufficient_data',
-    );
+    expect(
+      analysePace(toDailySeries(linear('2026-10-20', 4, 80, -100)), '2026-10-23').classification,
+    ).toBe('insufficient_data');
   });
 
   it('detects slowing', () => {
@@ -220,13 +285,17 @@ describe('pace analysis', () => {
   it('detects accelerating', () => {
     const prev = linear('2026-09-26', 14, 90, -40);
     const recent = linear('2026-10-10', 14, 89, -120);
-    expect(analysePace(toDailySeries([...prev, ...recent]), '2026-10-23').classification).toBe('accelerating');
+    expect(analysePace(toDailySeries([...prev, ...recent]), '2026-10-23').classification).toBe(
+      'accelerating',
+    );
   });
 
   it('detects reversal', () => {
     const prev = linear('2026-09-26', 14, 90, -100);
     const recent = linear('2026-10-10', 14, 88, 100);
-    expect(analysePace(toDailySeries([...prev, ...recent]), '2026-10-23').classification).toBe('reversed');
+    expect(analysePace(toDailySeries([...prev, ...recent]), '2026-10-23').classification).toBe(
+      'reversed',
+    );
   });
 
   it('stable', () => {
@@ -267,7 +336,10 @@ describe('forecast', () => {
   it('noisy data gives a widening interval that contains the point estimate', () => {
     const noise = [0, 300, -200, 150, -300, 250, -100, 200, -250, 100, 0, -150, 300, -200];
     const s = toDailySeries(
-      linear('2026-09-26', 28, 90, -100, 2).map((x, i) => ({ ...x, weightG: x.weightG + noise[i]! })),
+      linear('2026-09-26', 28, 90, -100, 2).map((x, i) => ({
+        ...x,
+        weightG: x.weightG + noise[i]!,
+      })),
     );
     const f = forecastGoal(s, goal, asOf);
     expect(f.status).toBe('ok');
@@ -277,7 +349,9 @@ describe('forecast', () => {
 
   it('flat weight → no trend', () => {
     const noise = [0, 200, -200, 100, -100, 0, 200, -200, 100, -100, 0, 50];
-    const s = toDailySeries(linear('2026-10-01', 12, 88, 0).map((x, i) => ({ ...x, weightG: x.weightG + noise[i]! })));
+    const s = toDailySeries(
+      linear('2026-10-01', 12, 88, 0).map((x, i) => ({ ...x, weightG: x.weightG + noise[i]! })),
+    );
     expect(forecastGoal(s, goal, asOf).status).toBe('no_trend');
   });
 
@@ -307,7 +381,9 @@ describe('forecast', () => {
 
   it('maintenance goals never get a date', () => {
     const m = { startWeightG: 80000, targetWeightG: 80000, startDate: '2026-09-26' };
-    expect(forecastGoal(toDailySeries(linear('2026-09-26', 28, 80, -100)), m, asOf).status).toBe('maintain_goal');
+    expect(forecastGoal(toDailySeries(linear('2026-09-26', 28, 80, -100)), m, asOf).status).toBe(
+      'maintain_goal',
+    );
   });
 });
 
@@ -323,7 +399,12 @@ describe('summary', () => {
 
   it('zero elapsed days → rate is null, not Infinity/NaN', () => {
     const s = computeSummary([e('2026-10-23', 80)], null, '2026-10-23');
-    expect(s.changeFromBaseline).toEqual({ deltaG: 0, days: 0, ratePerDayG: null, ratePerWeekG: null });
+    expect(s.changeFromBaseline).toEqual({
+      deltaG: 0,
+      days: 0,
+      ratePerDayG: null,
+      ratePerWeekG: null,
+    });
     expect(s.changeSincePrevious).toBeNull();
   });
 
@@ -334,7 +415,12 @@ describe('summary', () => {
       null,
       '2026-10-23',
     );
-    expect(s.changeFromBaseline).toEqual({ deltaG: -1400, days: 20, ratePerDayG: -70, ratePerWeekG: -490 });
+    expect(s.changeFromBaseline).toEqual({
+      deltaG: -1400,
+      days: 20,
+      ratePerDayG: -70,
+      ratePerWeekG: -490,
+    });
     expect(s.changeSincePrevious).toEqual({ deltaG: -900, days: 13 });
     expect(s.baseline!.source).toBe('first_entry');
   });
@@ -352,7 +438,10 @@ describe('summary', () => {
 
   it('multiple entries per day count as one measured day', () => {
     const s = computeSummary(
-      [e('2026-10-23', 80, { measuredAt: '2026-10-23T05:00:00Z' }), e('2026-10-23', 81, { measuredAt: '2026-10-23T20:00:00Z' })],
+      [
+        e('2026-10-23', 80, { measuredAt: '2026-10-23T05:00:00Z' }),
+        e('2026-10-23', 81, { measuredAt: '2026-10-23T20:00:00Z' }),
+      ],
       null,
       '2026-10-23',
     );

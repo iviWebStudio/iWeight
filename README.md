@@ -17,10 +17,15 @@ pnpm dev:api                              # http://localhost:4000/ready
 ```
 Без `OPENAI_API_KEY`/`OPENAI_MODEL` всё API работает, а `/v1/chat` отвечает 503 `AI_NOT_CONFIGURED`.
 
+Веб-приложение (в другом терминале): `pnpm dev:web` → http://localhost:3000. Без переменных Supabase
+вход идёт через локальные endpoint-ы API (только для разработки).
+E2E: `pnpm --filter @weight-ai/web test:e2e` (сам поднимает API и web на портах 4100/3100).
+
 ## Структура
 - `packages/core` — расчёты (готово, покрыто тестами)
 - `packages/contracts` — Zod-контракты API и типизированный клиент (готово)
 - `apps/api` — Fastify API + GPT-агент (готово, см. `docs/API_SPEC.md`, `docs/AI_AGENT.md`)
 - `apps/demo` — автономное интерактивное демо интерфейса (один HTML)
-- `apps/web`, `apps/mobile` — клиенты (не начато)
+- `apps/web` — веб-приложение Next.js (готово, скриншоты в `docs/screenshots/`)
+- `apps/mobile` — Android (не начато)
 - `supabase/migrations` — схема БД; `db/local` — шим Supabase для локального Postgres
