@@ -1,0 +1,22 @@
+{
+  "name": "weight-ai",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:local:setup": "bash scripts/db-local-setup.sh",
+    "dev:api": "pnpm --filter @weight-ai/api dev",
+    "dev:web": "pnpm --filter @weight-ai/web dev"
+  },
+  "devDependencies": {
+    "prettier": "3.9.10",
+    "turbo": "2.11.10",
+    "typescript": "5.9.3"
+  }
+}
