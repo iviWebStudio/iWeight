@@ -11,11 +11,16 @@ API (Fastify), PostgreSQL/Supabase (Auth + RLS), GPT-агент через OpenA
 pnpm install
 sudo -u postgres bash scripts/db-local-setup.sh
 pnpm --filter @weight-ai/core test
+pnpm --filter @weight-ai/api test        # интеграционные тесты на weight_ai_test
+cp .env.example apps/api/.env             # задать LOCAL_JWT_SECRET (≥32 символа)
+pnpm dev:api                              # http://localhost:4000/ready
 ```
+Без `OPENAI_API_KEY`/`OPENAI_MODEL` всё API работает, а `/v1/chat` отвечает 503 `AI_NOT_CONFIGURED`.
 
 ## Структура
 - `packages/core` — расчёты (готово, покрыто тестами)
-- `packages/contracts` — Zod-контракты API (не начато)
-- `apps/api` — Fastify API + GPT-агент (не начато)
+- `packages/contracts` — Zod-контракты API и типизированный клиент (готово)
+- `apps/api` — Fastify API + GPT-агент (готово, см. `docs/API_SPEC.md`, `docs/AI_AGENT.md`)
+- `apps/demo` — автономное интерактивное демо интерфейса (один HTML)
 - `apps/web`, `apps/mobile` — клиенты (не начато)
 - `supabase/migrations` — схема БД; `db/local` — шим Supabase для локального Postgres

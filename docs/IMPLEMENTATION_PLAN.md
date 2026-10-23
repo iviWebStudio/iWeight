@@ -6,28 +6,21 @@
 2. [x] Модель данных, миграция, RLS-политики (тесты RLS — в шаге 4)
 3. [x] Расчётное ядро `packages/core` (46 тестов)
 3a. [x] Интерактивное демо `apps/demo` (ADR-011): все основные экраны на реальном ядре, без сервера
-4. [~] Контракты и API
-   - [ ] `packages/contracts`: Zod-схемы запросов/ответов (camelCase), формат ошибок
-     `{ error: { code, message, details? } }`, типизированный fetch-клиент для web/mobile
-   - [ ] `apps/api/src/config.ts` (env через Zod), `db.ts` (`withUser(userId, fn)`: BEGIN →
-     `SET LOCAL ROLE authenticated` → `set_config('request.jwt.claims', json, true)`)
-   - [ ] auth-адаптер (ADR-007), `buildApp(deps)` для тестов, `server.ts`
-   - [ ] Endpoint-ы из ТЗ §9 + `GET /health`, `GET /ready`, `GET/DELETE /v1/goals[/active]`,
-     `GET/DELETE /v1/conversations[/:id]`, `GET/POST/PATCH/DELETE /v1/memory`, `DELETE /v1/me`
-     (тело `{ "confirm": "DELETE" }` → `delete_current_user()`)
-   - [ ] Правила `POST /v1/weights`: `measuredOn` по умолчанию = сегодня в поясе профиля; запрет
-     будущих дат (по поясу пользователя) и дат старше 10 лет; ADR-004 для дубликатов
-   - [ ] `@fastify/rate-limit` по `sub`, `bodyLimit` 16 КБ, helmet, CORS по `CORS_ORIGINS`, логи без
-     веса/email (redact)
-   - [ ] Интеграционные тесты (vitest + реальная БД `weight_ai_test`): вертикальный срез и
-     изоляция A/B (чтение/изменение/удаление чужой записи, подмена `user_id`)
-5. [ ] GPT-агент (Responses API, SDK `openai@7.43.0` уже установлен в apps/api)
-   - инструменты из ТЗ §10, аргументы проверяются Zod, исполнение только через `withUser`
-   - лимит итераций, таймауты, ретраи 429/5xx с backoff, `agent_runs` с токенами и стоимостью
-   - память: `agent_memory` (уровень 3), резюме `conversations.summary` (уровень 6) — не может
-     менять вес/цели; контекст только текущего пользователя
-   - ADR-009 для удаления; тестовые диалоги на мок-клиенте OpenAI с проверкой вызванных
-     инструментов и фактических изменений в БД
+4. [x] Контракты и API (`packages/contracts`, `apps/api`; 46 интеграционных тестов на реальной БД)
+   - [x] Zod-схемы, формат ошибок, типизированный клиент `createApiClient`
+   - [x] `config.ts` (env через Zod, local-auth запрещён в production), `db.ts` (`withUser` → RLS)
+   - [x] auth: Supabase JWKS и локальный HS256-адаптер (ADR-007)
+   - [x] endpoint-ы ТЗ §9 + health/ready, goals, memory, conversations, `DELETE /v1/me`
+   - [x] правила записи веса (пояс, будущие даты, ADR-004, идемпотентность)
+   - [x] rate-limit по пользователю, лимит тела 16 КБ, helmet, CORS, логи без персональных данных
+   - [x] тесты: вертикальный срез, изоляция A/B (API и сырой SQL), fail-closed роль API
+   - [ ] проверка на реальном Supabase (JWKS, пулер, `delete_current_user`) — нужен проект (BLOCKERS №2)
+5. [x] GPT-агент (Responses API) — код и тесты на скриптовом двойнике модели
+   - [x] 10 инструментов, Zod-аргументы, исполнение через `withUser`, готовые строки чисел (ADR-013)
+   - [x] лимит шагов, таймауты/ретраи SDK, маппинг ошибок, `agent_runs` с токенами и стоимостью,
+     суточный бюджет (ADR-014)
+   - [x] контекст только текущего пользователя, память, резюме длинных диалогов, ADR-009
+   - [ ] прогон на настоящей модели и набор тестовых диалогов с живым GPT — нужен ключ (BLOCKERS №1)
 6. [ ] Web (Next.js 16, React 19, Recharts) — 15 экранов из ТЗ §11, Playwright e2e
 7. [ ] Android (Expo 58, RN 0.88) — SecureStore для сессии, офлайн-очередь с `client_entry_id`,
    явная пометка «ожидает отправки», `eas.json`
