@@ -5,3 +5,4 @@
 - Начальная миграция Supabase: 9 таблиц, RLS, column-level grants, удаление аккаунта.
 - Локальный шим Supabase и скрипт установки БД.
 - Проект перенесён в GitHub-репозиторий `iviwebstudio/iweight` (история сохранена).
+- Интерактивное демо `apps/demo` (`pnpm --filter @weight-ai/demo build` → `apps/demo/dist/index.html`).

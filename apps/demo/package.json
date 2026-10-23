@@ -1,0 +1,16 @@
+{
+  "name": "@weight-ai/demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Self-contained interactive demo: one HTML file with the real @weight-ai/core inlined, local data, scripted agent.",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@weight-ai/core": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}
