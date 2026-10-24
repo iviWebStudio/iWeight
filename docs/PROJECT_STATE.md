@@ -77,8 +77,15 @@ GitHub-репозиторий `iviwebstudio/iweight`; сделаны демо, A
 - Android, CI, деплой — не начаты.
 
 ### Деплой (в процессе)
-- Supabase-проект `weight-ai` (`rhuveovxnvfbkhefzzng`, eu-west-1, Free) создан; **схема ещё не
-  применена** (сервер Supabase запросил подтверждение, ответа не было).
+- Supabase-проект `weight-ai` (`rhuveovxnvfbkhefzzng`, eu-west-1, Free) создан. Миграции
+  `…init` и `…api_role` применены владельцем через SQL Editor (MCP-подтверждения до клиента не
+  доходили); пароль `weight_api` задан владельцем. Проверено чтением: 9 таблиц с RLS, 9 политик,
+  `weight_api` login/noinherit с членством в `authenticated`/`anon` без наследования, триггер
+  регистрации есть, `anon` не может читать веса и вызывать служебные функции.
+- Советники Supabase: security — 1 предупреждение (`delete_current_user` вызываема `authenticated`,
+  так задумано: удаляет только вызывающего); performance — `auth_rls_initplan` и индекс на
+  `agent_runs.conversation_id` закрываются миграцией `20261025000001_rls_initplan.sql` (проверена
+  локально, в Supabase **ещё не применена**).
 - Код под Vercel готов (ADR-017, `docs/DEPLOYMENT.md`): обработчик проверен локально (ready,
   регистрация, запись, удаление аккаунта), сборка сайта с параметрами Supabase OK, API 49/49
   (+ проверка токенов JWKS/ES256 и HS256), e2e 7/7.

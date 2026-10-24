@@ -7,7 +7,8 @@ GitHub-репозитория `iviwebstudio/iweight`: `iweight-api` (`apps/api`,
 ## Supabase (проект `weight-ai`, ref `rhuveovxnvfbkhefzzng`, eu-west-1)
 - URL: `https://rhuveovxnvfbkhefzzng.supabase.co`
 - Публичный ключ (можно показывать): `sb_publishable_8HwyQkd4gbVlEeIx_ZSpCQ_2K9hbc4U`
-- Миграции: `supabase/migrations/*.sql` по порядку (применяются через Supabase MCP или SQL Editor).
+- Миграции: `supabase/migrations/*.sql` строго по порядку имён (через Supabase MCP или SQL Editor).
+  Применены в prod: `20261023000001_init`, `20261024000001_api_role`.
 - Роль API `weight_api` создаётся миграцией **без пароля**. Пароль задаёт владелец в SQL Editor:
   `alter role weight_api with password '…';` — пароль не попадает ни в git, ни в чат.
 - Токены: если проект на старом общем секрете (HS256), API нужен `SUPABASE_JWT_SECRET`
