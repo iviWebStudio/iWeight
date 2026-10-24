@@ -3,8 +3,8 @@
 | # | Что | Зачем | Статус |
 |---|-----|-------|--------|
 | 1 | `OPENAI_API_KEY` и выбор `OPENAI_MODEL` | Реальные вызовы GPT. Ключ — только в `.env`/секретах хостинга, не в чат и не в git | ожидается |
-| 2 | Supabase-проект (dev/staging, позже prod) | Auth и управляемый Postgres. Перед созданием — проверить стоимость | ожидается |
+| 2 | Supabase-проект (dev/staging, позже prod) | Auth и управляемый Postgres | создан `weight-ai` (Free); осталось: пароль роли `weight_api`, ключи JWT |
 | 3 | GitHub-репозиторий | Хранение кода и CI | решено: `iviwebstudio/iweight` |
 | 4 | Expo-аккаунт (EAS) и ключ подписи Android | Сборка APK/AAB | ожидается |
-| 5 | Хостинг API и web | Деплой (например, Vercel для web + Render/Fly/Railway для API) | не выбран |
+| 5 | Хостинг API и web | Деплой | выбран Vercel Hobby; проекты создаёт владелец (`docs/DEPLOYMENT.md`) |
 | 6 | Юридическая проверка Terms/Privacy | Публичный запуск | позже |

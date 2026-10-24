@@ -2,17 +2,29 @@ import pg from 'pg';
 
 export type Db = pg.PoolClient;
 
-export function createPool(connectionString: string, max = 10): pg.Pool {
-  const pool = new pg.Pool({
+export interface PoolOptions {
+  max?: number;
+  /** 'off' for local Postgres; 'verify' checks the server certificate against `caCert`. */
+  ssl?: 'off' | 'require' | 'verify';
+  caCert?: string;
+}
+
+export function createPool(connectionString: string, o: PoolOptions = {}): pg.Pool {
+  const ssl =
+    o.ssl === 'verify'
+      ? { ca: o.caCert, rejectUnauthorized: true }
+      : o.ssl === 'require'
+        ? { rejectUnauthorized: false } // encrypted, certificate not checked
+        : undefined;
+  return new pg.Pool({
     connectionString,
-    max,
+    max: o.max ?? 10,
+    ssl,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
   });
-  // `date` columns stay as 'YYYY-MM-DD' strings (calendar dates, ADR-003).
-  pool.on('connect', () => undefined);
-  return pool;
 }
+// `date` columns stay as 'YYYY-MM-DD' strings (calendar dates, ADR-003).
 pg.types.setTypeParser(1082, (v) => v);
 // bigint (cost) fits comfortably in a JS number at our scale.
 pg.types.setTypeParser(20, (v) => Number(v));

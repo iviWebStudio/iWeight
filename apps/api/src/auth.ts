@@ -1,4 +1,10 @@
-import { createRemoteJWKSet, jwtVerify, SignJWT, type JWTPayload } from 'jose';
+import {
+  createRemoteJWKSet,
+  decodeProtectedHeader,
+  jwtVerify,
+  SignJWT,
+  type JWTPayload,
+} from 'jose';
 import { randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import type pg from 'pg';
@@ -23,17 +29,28 @@ function userFromPayload(p: JWTPayload): AuthUser {
   return { id: p.sub.toLowerCase() };
 }
 
-/** Supabase access tokens, verified against the project's JWKS (ADR-007). */
-export function supabaseVerifier(supabaseUrl: string): AuthVerifier {
+/**
+ * Supabase access tokens (ADR-007). Projects on asymmetric JWT signing keys are verified against
+ * the public JWKS; projects still on the legacy shared secret (HS256) need `jwtSecret`.
+ * Both paths check issuer, audience, expiry and the algorithm.
+ */
+export function supabaseVerifier(supabaseUrl: string, jwtSecret?: string): AuthVerifier {
   const base = supabaseUrl.replace(/\/$/, '');
   const jwks = createRemoteJWKSet(new URL(`${base}/auth/v1/.well-known/jwks.json`));
+  const secret = jwtSecret ? new TextEncoder().encode(jwtSecret) : null;
+  const opts = { audience: 'authenticated', issuer: `${base}/auth/v1` };
   return {
     async verify(token) {
       try {
-        const { payload } = await jwtVerify(token, jwks, {
-          audience: 'authenticated',
-          issuer: `${base}/auth/v1`,
-        });
+        const { alg } = decodeProtectedHeader(token);
+        const { payload } =
+          alg === 'HS256'
+            ? secret
+              ? await jwtVerify(token, secret, { ...opts, algorithms: ['HS256'] })
+              : (() => {
+                  throw new Error('HS256 token but SUPABASE_JWT_SECRET is not set');
+                })()
+            : await jwtVerify(token, jwks, { ...opts, algorithms: ['ES256', 'RS256', 'EdDSA'] });
         return userFromPayload(payload);
       } catch (e) {
         if (e instanceof ApiError) throw e;
@@ -135,5 +152,8 @@ export function createVerifier(
     const local = localAuth(config.LOCAL_JWT_SECRET!, pool);
     return { verifier: local.verifier, local };
   }
-  return { verifier: supabaseVerifier(config.SUPABASE_URL!), local: null };
+  return {
+    verifier: supabaseVerifier(config.SUPABASE_URL!, config.SUPABASE_JWT_SECRET),
+    local: null,
+  };
 }

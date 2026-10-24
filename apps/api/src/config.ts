@@ -9,10 +9,19 @@ const EnvSchema = z
     HOST: z.string().default('0.0.0.0'),
     DATABASE_URL: z.string().min(1),
     DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
+    /** Supabase pooler: 'verify' with DATABASE_CA_CERT (PEM from the dashboard), or 'require'. */
+    DATABASE_SSL: z.enum(['off', 'require', 'verify']).optional(),
+    DATABASE_CA_CERT: z.string().optional(),
     AUTH_PROVIDER: z.enum(['supabase', 'local']).default('supabase'),
     LOCAL_JWT_SECRET: z.string().optional(),
     SUPABASE_URL: z
       .url()
+      .optional()
+      .or(z.literal('').transform(() => undefined)),
+    /** Only for Supabase projects still on the legacy HS256 JWT secret. */
+    SUPABASE_JWT_SECRET: z
+      .string()
+      .min(32)
       .optional()
       .or(z.literal('').transform(() => undefined)),
     OPENAI_API_KEY: z.string().optional(),
@@ -49,6 +58,13 @@ const EnvSchema = z
         });
       }
     }
+    if (env.DATABASE_SSL === 'verify' && !env.DATABASE_CA_CERT) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DATABASE_CA_CERT'],
+        message: 'required when DATABASE_SSL=verify',
+      });
+    }
     if (env.AUTH_PROVIDER === 'supabase' && !env.SUPABASE_URL) {
       ctx.addIssue({
         code: 'custom',
@@ -58,7 +74,11 @@ const EnvSchema = z
     }
   });
 
-export type Config = z.infer<typeof EnvSchema> & { corsOrigins: string[]; aiEnabled: boolean };
+export type Config = z.infer<typeof EnvSchema> & {
+  corsOrigins: string[];
+  aiEnabled: boolean;
+  databaseSsl: 'off' | 'require' | 'verify';
+};
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
   const parsed = EnvSchema.safeParse(env);
@@ -73,5 +93,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       .map((s) => s.trim())
       .filter(Boolean),
     aiEnabled: Boolean(c.OPENAI_API_KEY && c.OPENAI_MODEL),
+    // A CA certificate implies verification; otherwise local Postgres runs without TLS.
+    databaseSsl: c.DATABASE_SSL ?? (c.DATABASE_CA_CERT ? 'verify' : 'off'),
   };
 }

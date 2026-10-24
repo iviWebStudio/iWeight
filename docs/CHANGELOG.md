@@ -16,3 +16,4 @@
 - Ядро: `zonedTimeToUtc`, `localTimeInTimeZone` (общие для API и web).
 - Агент: числа в результатах инструментов — на языке пользователя; «сейчас» сохраняется с временем
   (ADR-016).
+- Подготовка к деплою: Supabase-проект, миграция роли API, serverless-обработчик для Vercel, `vercel.json`, TLS к БД, проверка токенов Supabase (JWKS и HS256), `docs/DEPLOYMENT.md`.
